@@ -17,6 +17,33 @@ import matplotlib.pyplot as plt
 import numpy as np 
 import random
 import time
+
+
+class Adam():
+    def __init__(self, learning_rate=0.001, b1=0.9, b2=0.999):
+        self.learning_rate = learning_rate
+        self.eps = 1e-8
+        self.m = None
+        self.v = None
+        # Decay rates
+        self.b1 = b1
+        self.b2 = b2
+
+    def update(self, w, grad_wrt_w):
+        # If not initialized
+        if self.m is None:
+            self.m = np.zeros(np.shape(grad_wrt_w))
+            self.v = np.zeros(np.shape(grad_wrt_w))
+        
+        self.m = self.b1 * self.m + (1 - self.b1) * grad_wrt_w
+        self.v = self.b2 * self.v + (1 - self.b2) * np.power(grad_wrt_w, 2)
+
+        m_hat = self.m / (1 - self.b1)
+        v_hat = self.v / (1 - self.b2)
+
+        self.w_updt = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.eps)
+
+        return w - self.w_updt
  
 class Network:
 
@@ -49,6 +76,11 @@ class Network:
 
 		self.hid_delta = np.zeros(self.Top[1] ) # output of first hidden layer
 		self.out_delta = np.zeros(self.Top[2]) #  output last layer
+
+
+		self.adam = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+
+
 
 
 
@@ -88,6 +120,48 @@ class Network:
 		self.W1 += (input_vec.T.dot(self.hid_delta) * self.learn_rate) 
 		self.B1+=  (-1 * self.learn_rate * self.hid_delta) 
 
+
+	def BackwardPass_Adam(self, input_vec, desired):   
+
+
+
+		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
+		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout))  
+
+		#adam.update(w, grad_wrt_w)
+
+
+		#self.W2+= adam.update(self.W2, self.out_delta)
+
+		#x = self.adam.update(self.B2, self.out_delta)
+
+		#print(x, ' adam')
+		
+		#self.B2+= (x) * -1
+
+
+
+		#self.W1+= adam.update(self.W1, self.out_delta)
+
+
+		x = self.adam.update(self.B1, self.hid_delta)
+
+		print(x, ' adam')
+		
+		self.B1+= (x) * -1
+		
+		#self.B1+= (self.adam.update(self.B1, self.hid_delta) * -1)
+
+
+
+
+		#self.W2+= self.hidout.T.dot(self.out_delta) * self.learn_rate
+		#self.B2+=  (-1 * self.learn_rate * self.out_delta)
+
+		#self.W1 += (input_vec.T.dot(self.hid_delta) * self.learn_rate) 
+		#self.B1+=  (-1 * self.learn_rate * self.hid_delta) 
+
+		#https://github.com/mmaric27/BasicDNN/blob/master/DNN_basic.py
 			
  
 	
@@ -130,7 +204,7 @@ class Network:
 		self.BestB1 = self.B1
 		self.BestB2 = self.B2  
 
-	def BP_GD(self):  
+	def BP_GD(self, adam_optimiser):  
 
 
 		Input = np.zeros((1, self.Top[0])) # temp hold input
@@ -149,7 +223,12 @@ class Network:
 				Desired[:]  = self.TrainData[s,self.Top[0]:]  
 
 				self.ForwardPass(Input)  
-				self.BackwardPass(Input ,Desired)
+
+				if adam_optimiser == True:
+					self.BackwardPass_Adam(Input ,Desired)
+				else:
+					self.BackwardPass(Input ,Desired)
+
 				sse = sse+ self.sampleEr(Desired)
 			 
 			mse = np.sqrt(sse/self.NumSamples*self.Top[2])
@@ -237,12 +316,16 @@ def main():
 	Epochs =  np.zeros(MaxRun)
 	Time =  np.zeros(MaxRun)
 
+	adam_optimiser = True # False means you use SGD 
+
+
+
 	for run in range(0, MaxRun  ):
 		print(run, ' is experimental run') 
 
 		fnn = Network(Topo, TrainData, TestData, MaxTime, TrSamples, MinCriteria, learnRate)
 		start_time=time.time()
-		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.BP_GD()   
+		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.BP_GD(adam_optimiser)   
 
 		Time[run]  =time.time()-start_time
 		(testMSE[run], testPerf[run]) = fnn.TestNetwork(TestData, TestSize, testTolerance)
