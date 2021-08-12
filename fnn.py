@@ -80,10 +80,17 @@ class Network:
 		self.hid_delta = np.zeros(self.Top[1] ) # output of first hidden layer
 		self.out_delta = np.zeros(self.Top[2]) #  output last layer
 
+		adam_learnrate = 0.5
 
-		self.adam_outlayer = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 
-		self.adam_hidlayer = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+		self.adam_outlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+		self.adam_hidlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+
+		self.out_delta_prev =   np.zeros(self.Top[2]) # for advanced optimisers (adam, adagrad etc )
+		self.out_delta_prev.fill(adam_learnrate)
+
+		self.hid_delta_prev =   np.zeros(self.Top[1])
+		self.hid_delta_prev.fill(adam_learnrate)
 
 
 
@@ -130,16 +137,24 @@ class Network:
 
 		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
 		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout))  
+
+
   
 
-		adam_outlayergrad = self.adam_outlayer.update(self.out_delta)
-		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta)
+		adam_outlayergrad = self.adam_outlayer.update(self.out_delta_prev)
+		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta_prev)
 
-		self.W2+= self.hidout.T.dot(adam_outlayergrad )  
-		self.B2+=  (-1 * adam_outlayergrad )
+		#print(adam_outlayergrad, ' adam_out')
 
-		self.W1 += input_vec.T.dot(adam_hidlayergrad)  
-		self.B1+=  (-1 * adam_hidlayergrad) 
+		self.W2+= self.hidout.T.dot(self.out_delta) *  adam_outlayergrad 
+		self.B2+=  (-1  * self.out_delta* adam_outlayergrad )
+
+		self.W1 += input_vec.T.dot(self.hid_delta) *  adam_hidlayergrad
+		self.B1+=  (-1 * self.hid_delta * adam_hidlayergrad) 
+
+
+		self.out_delta_prev =   self.out_delta.copy()
+		self.hid_delta_prev = self.hid_delta.copy()  
 
 
 
