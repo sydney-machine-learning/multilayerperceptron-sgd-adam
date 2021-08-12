@@ -29,7 +29,9 @@ class Adam():
         self.b1 = b1
         self.b2 = b2
 
-    def update(self, w, grad_wrt_w):
+    #def update(self, w, grad_wrt_w):
+	
+    def update(self, grad_wrt_w):
         # If not initialized
         if self.m is None:
             self.m = np.zeros(np.shape(grad_wrt_w))
@@ -43,7 +45,8 @@ class Adam():
 
         self.w_updt = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.eps)
 
-        return w - self.w_updt
+        #return w - self.w_updt
+        return  self.w_updt
  
 class Network:
 
@@ -78,7 +81,9 @@ class Network:
 		self.out_delta = np.zeros(self.Top[2]) #  output last layer
 
 
-		self.adam = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+		self.adam_outlayer = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+
+		self.adam_hidlayer = Adam(0.001, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 
 
 
@@ -123,46 +128,24 @@ class Network:
 
 	def BackwardPass_Adam(self, input_vec, desired):   
 
-
-
 		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
 		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout))  
+  
 
-		#adam.update(w, grad_wrt_w)
+		adam_outlayergrad = self.adam_outlayer.update(self.out_delta)
+		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta)
 
+		self.W2+= self.hidout.T.dot(adam_outlayergrad )  
+		self.B2+=  (-1 * adam_outlayergrad )
 
-		#self.W2+= adam.update(self.W2, self.out_delta)
-
-		#x = self.adam.update(self.B2, self.out_delta)
-
-		#print(x, ' adam')
-		
-		#self.B2+= (x) * -1
-
-
-
-		#self.W1+= adam.update(self.W1, self.out_delta)
-
-
-		x = self.adam.update(self.B1, self.hid_delta)
-
-		print(x, ' adam')
-		
-		self.B1+= (x) * -1
-		
-		#self.B1+= (self.adam.update(self.B1, self.hid_delta) * -1)
+		self.W1 += input_vec.T.dot(adam_hidlayergrad)  
+		self.B1+=  (-1 * adam_hidlayergrad) 
 
 
 
 
-		#self.W2+= self.hidout.T.dot(self.out_delta) * self.learn_rate
-		#self.B2+=  (-1 * self.learn_rate * self.out_delta)
 
-		#self.W1 += (input_vec.T.dot(self.hid_delta) * self.learn_rate) 
-		#self.B1+=  (-1 * self.learn_rate * self.hid_delta) 
-
-		#https://github.com/mmaric27/BasicDNN/blob/master/DNN_basic.py
-			
+	 
  
 	
 	def TestNetwork(self, Data, testSize, tolerance):
@@ -235,7 +218,7 @@ class Network:
 
 			if mse < bestmse:
 				 bestmse = mse
-				 print(bestmse, epoch, ' bestmse epoch')
+				 #print(bestmse, epoch, ' bestmse epoch')
 				 self.saveKnowledge() 
 				 (x,bestTrain) = self.TestNetwork(self.TrainData, self.NumSamples, 0.2)
 
