@@ -80,17 +80,11 @@ class Network:
 		self.hid_delta = np.zeros(self.Top[1] ) # output of first hidden layer
 		self.out_delta = np.zeros(self.Top[2]) #  output last layer
 
-		adam_learnrate = 0.5
-
+		adam_learnrate = 0.01
 
 		self.adam_outlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 		self.adam_hidlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
-
-		self.out_delta_prev =   np.zeros(self.Top[2]) # for advanced optimisers (adam, adagrad etc )
-		self.out_delta_prev.fill(adam_learnrate)
-
-		self.hid_delta_prev =   np.zeros(self.Top[1])
-		self.hid_delta_prev.fill(adam_learnrate)
+ 
 
 
 
@@ -131,30 +125,35 @@ class Network:
 
 		self.W1 += (input_vec.T.dot(self.hid_delta) * self.learn_rate) 
 		self.B1+=  (-1 * self.learn_rate * self.hid_delta) 
+ 
 
 
 	def BackwardPass_Adam(self, input_vec, desired):   
 
+ 
+
 		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
 		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout))  
 
-
+		adam_outlayergrad = self.adam_outlayer.update(self.out_delta.copy())
+		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta.copy())
   
+		self.W2+= self.hidout.T.dot(adam_outlayergrad ) 
 
-		adam_outlayergrad = self.adam_outlayer.update(self.out_delta_prev)
-		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta_prev)
+		self.B2+=  (-1  *  adam_outlayergrad )
+ 
 
-		#print(adam_outlayergrad, ' adam_out')
+		self.W1 += input_vec.T.dot(adam_hidlayergrad) 
 
-		self.W2+= self.hidout.T.dot(self.out_delta) *  adam_outlayergrad 
-		self.B2+=  (-1  * self.out_delta* adam_outlayergrad )
+		self.B1+=  (-1 *  adam_hidlayergrad) 
+		 
 
-		self.W1 += input_vec.T.dot(self.hid_delta) *  adam_hidlayergrad
-		self.B1+=  (-1 * self.hid_delta * adam_hidlayergrad) 
+		#print(self.W1, ' W1')
+		#print(self.hid_delta, ' self.hidgrad') 
+		#print(adam_hidlayergrad, '  adam_hidlayergrad')
 
-
-		self.out_delta_prev =   self.out_delta.copy()
-		self.hid_delta_prev = self.hid_delta.copy()  
+ 
+ 
 
 
 
@@ -241,6 +240,11 @@ class Network:
 			
 			epoch=epoch+1  
 
+
+		
+		print(self.BestW1, 'W1')
+		print(self.BestW2, ' W2')
+
 		return (Er,bestmse, bestTrain, epoch) 
 
 
@@ -268,7 +272,7 @@ def main():
 		learnRate = 0.1  
 		TrainData  = normalisedata(TrDat, Input, Output) 
 		TestData  = normalisedata(TesDat, Input, Output)
-		MaxTime = 500
+		MaxTime = 500 #500
 
 
 		 
@@ -282,7 +286,7 @@ def main():
 		TrSamples =  TrainData.shape[0]
 		TestSize = TestData.shape[0]
 		learnRate = 0.9 
-		MaxTime = 1000
+		MaxTime = 100 #1000
 
 	elif problem == 3:
 		TrainData = np.loadtxt("data/xor.csv", delimiter=',') #  XOR  problem
@@ -298,7 +302,7 @@ def main():
 
 
 	Topo = [Input, Hidden, Output] 
-	MaxRun = 3 # number of experimental runs 
+	MaxRun = 1 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
 
