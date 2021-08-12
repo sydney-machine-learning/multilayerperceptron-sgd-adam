@@ -80,7 +80,7 @@ class Network:
 		self.hid_delta = np.zeros(self.Top[1] ) # output of first hidden layer
 		self.out_delta = np.zeros(self.Top[2]) #  output last layer
 
-		adam_learnrate = 0.01
+		adam_learnrate = 0.05
 
 		self.adam_outlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 		self.adam_hidlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
@@ -242,8 +242,8 @@ class Network:
 
 
 		
-		print(self.BestW1, 'W1')
-		print(self.BestW2, ' W2')
+		#print(self.BestW1, 'W1')
+		#print(self.BestW2, ' W2')
 
 		return (Er,bestmse, bestTrain, epoch) 
 
@@ -272,7 +272,7 @@ def main():
 		learnRate = 0.1  
 		TrainData  = normalisedata(TrDat, Input, Output) 
 		TestData  = normalisedata(TesDat, Input, Output)
-		MaxTime = 500 #500
+		MaxTime = 200 #500
 
 
 		 
@@ -286,7 +286,7 @@ def main():
 		TrSamples =  TrainData.shape[0]
 		TestSize = TestData.shape[0]
 		learnRate = 0.9 
-		MaxTime = 100 #1000
+		MaxTime = 200 #1000
 
 	elif problem == 3:
 		TrainData = np.loadtxt("data/xor.csv", delimiter=',') #  XOR  problem
@@ -302,7 +302,7 @@ def main():
 
 
 	Topo = [Input, Hidden, Output] 
-	MaxRun = 1 # number of experimental runs 
+	MaxRun = 10 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
 
