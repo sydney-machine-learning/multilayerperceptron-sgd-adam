@@ -48,9 +48,9 @@ class Adam():
 		#return w - self.w_updt
 		return  self.w_updt
 
-class layer:
+class Layers:
 
-	def __init__(self, first, second):  
+	def __init__(self, first, second,adam_learnrate):  
 		#self.number = first
 
 		self.weights = np.random.uniform(-0.5, 0.5, (first , second))   
@@ -59,13 +59,16 @@ class layer:
 		self.output = np.zeros(second) # output of  layer 
 		self.gradient = np.zeros(second) # gradient of layer 
 
+
+		self.adam_opt = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+
 		
 
  
 class Network:
 
-	def __init__(self, Topo, Train, Test, MaxTime, Samples, MinPer, learnRate): 
-		self.Top  = Topo  # NN topology [input, hidden, output]
+	def __init__(self, topology, Train, Test, MaxTime, Samples, MinPer, learnRate): 
+		self.topology  = topology  # NN topology [input, hidden, output]
 		self.Max = MaxTime # max epocs
 		self.TrainData = Train
 		self.TestData = Test
@@ -78,39 +81,41 @@ class Network:
 		
 		#initialize weights ( W1 W2 ) and bias ( b1 b2 ) of the network
 		np.random.seed() 
-		self.W1 = np.random.uniform(-0.5, 0.5, (self.Top[0] , self.Top[1]))  
+		self.W1 = np.random.uniform(-0.5, 0.5, (self.topology[0] , self.topology[1]))  
 		#print(self.W1,  ' self.W1')
-		self.B1 = np.random.uniform(-0.5,0.5, (1, self.Top[1])  ) # bias first layer
+		self.B1 = np.random.uniform(-0.5,0.5, (1, self.topology[1])  ) # bias first layer
 		#print(self.B1, ' self.B1')
 		self.BestB1 = self.B1
 		self.BestW1 = self.W1 
-		self.W2 = np.random.uniform(-0.5, 0.5, (self.Top[1] , self.Top[2]))   
-		self.B2 = np.random.uniform(-0.5,0.5, (1,self.Top[2]))  # bias second layer
+		self.W2 = np.random.uniform(-0.5, 0.5, (self.topology[1] , self.topology[2]))   
+		self.B2 = np.random.uniform(-0.5,0.5, (1,self.topology[2]))  # bias second layer
 		self.BestB2 = self.B2
 		self.BestW2 = self.W2 
-		self.hidout = np.zeros(self.Top[1] ) # output of first hidden layer
-		self.out = np.zeros(self.Top[2]) #  output last layer
+		self.hidout = np.zeros(self.topology[1] ) # output of first hidden layer
+		self.out = np.zeros(self.topology[2]) #  output last layer
 
-		self.hid_delta = np.zeros(self.Top[1] ) # output of first hidden layer
-		self.out_delta = np.zeros(self.Top[2]) #  output last layer
+		self.hid_delta = np.zeros(self.topology[1] ) # output of first hidden layer
+		self.out_delta = np.zeros(self.topology[2]) #  output last layer
 
 		adam_learnrate = 0.05
 
 		self.adam_outlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 		self.adam_hidlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 
-		model = []
+		self.num_layers = len(self.topology)-1
 
- 
-		for i in range(3):
-			model.append(layer(2,2))
 
-		
-		for l in model:
-			print(l.output, ' layer obj')
+		self.layer = [None]*20  # create list of Layers objects ( just max size of 20 for now - assuming a very deep neural network )
 
-        
-		print(l[1].output, ' layer obj')
+		print(self.topology,  ' topology')
+
+		for n in range(0, self.num_layers): 
+			print(self.topology[n],self.topology[n+1], n, ' self.topology[n],self.topology[n+1]')
+			self.layer[n] = Layers(self.topology[n],self.topology[n+1], adam_learnrate)
+			
+		for n in range(0, self.num_layers):  
+			print(n, self.layer[n].output)
+			print(n, self.layer[n].weights)
  
 
 
