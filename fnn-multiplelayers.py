@@ -43,10 +43,10 @@ class Adam():
 		m_hat = self.m / (1 - self.b1)
 		v_hat = self.v / (1 - self.b2)
 
-		self.w_updt = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.eps)
+		self.grad = self.learning_rate * m_hat / (np.sqrt(v_hat) + self.eps)
 
 		#return w - self.w_updt
-		return  self.w_updt
+		return  self.grad
 
 class Layers:
 
@@ -69,53 +69,45 @@ class Network:
 
 	def __init__(self, topology, Train, Test, MaxTime, Samples, MinPer, learnRate): 
 		self.topology  = topology  # NN topology [input, hidden, output]
+
+		self.output_activationfunc = 'sigmoid'
+
+
+		self.Top  = topology  # NN topology [input, hidden, output]
+
+
 		self.Max = MaxTime # max epocs
 		self.TrainData = Train
 		self.TestData = Test
 		self.NumSamples = Samples
 
-		self.learn_rate  = learnRate
+		self.sgdlearn_rate  = learnRate
  
 
 		self.minPerf = MinPer
-		
-		#initialize weights ( W1 W2 ) and bias ( b1 b2 ) of the network
-		np.random.seed() 
-		self.W1 = np.random.uniform(-0.5, 0.5, (self.topology[0] , self.topology[1]))  
-		#print(self.W1,  ' self.W1')
-		self.B1 = np.random.uniform(-0.5,0.5, (1, self.topology[1])  ) # bias first layer
-		#print(self.B1, ' self.B1')
-		self.BestB1 = self.B1
-		self.BestW1 = self.W1 
-		self.W2 = np.random.uniform(-0.5, 0.5, (self.topology[1] , self.topology[2]))   
-		self.B2 = np.random.uniform(-0.5,0.5, (1,self.topology[2]))  # bias second layer
-		self.BestB2 = self.B2
-		self.BestW2 = self.W2 
-		self.hidout = np.zeros(self.topology[1] ) # output of first hidden layer
-		self.out = np.zeros(self.topology[2]) #  output last layer
+		 
+		np.random.seed()   
 
-		self.hid_delta = np.zeros(self.topology[1] ) # output of first hidden layer
-		self.out_delta = np.zeros(self.topology[2]) #  output last layer
+		self.adam_learnrate = 0.05
 
-		adam_learnrate = 0.05
+		self.adam_outlayer = Adam(self.adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+		self.adam_hidlayer = Adam(self.adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
 
-		self.adam_outlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
-		self.adam_hidlayer = Adam(adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
-
-		self.num_layers = len(self.topology)-1
+		self.end_index = len(self.topology)-1
 
 
 		self.layer = [None]*20  # create list of Layers objects ( just max size of 20 for now - assuming a very deep neural network )
 
 		print(self.topology,  ' topology')
 
-		for n in range(0, self.num_layers): 
-			print(self.topology[n],self.topology[n+1], n, ' self.topology[n],self.topology[n+1]')
-			self.layer[n] = Layers(self.topology[n],self.topology[n+1], adam_learnrate)
+		self.layer[0] = Layers(1,1, 0) # this is just for layer where input features are stored
+
+		for n in range(1,  len(self.topology)):  
+			self.layer[n] = Layers(self.topology[n-1],self.topology[n], self.adam_learnrate)
 			
-		for n in range(0, self.num_layers):  
-			print(n, self.layer[n].output)
-			print(n, self.layer[n].weights)
+		#for n in range(0, self.num_layers):  
+		#	print(n, self.layer[n].output)
+		#	print(n, self.layer[n].weights)
  
 
 
@@ -123,8 +115,11 @@ class Network:
 
 
 
-	def sigmoid(self,x):
-		return 1 / (1 + np.exp(-x))
+	def activation(self,x):
+		if  self.output_activationfunc == 'sigmoid':
+			return 1 / (1 + np.exp(-x))
+		else:
+			return x # linear acivation
 
 	
 	def softmax(self, x):
@@ -132,31 +127,37 @@ class Network:
 		exps = np.exp(x - x.max())
 		return exps / np.sum(exps, axis=0)
 
-	def sampleEr(self,actualout):
-		error = np.subtract(self.out, actualout)
-		sqerror= np.sum(np.square(error))/self.Top[2] 
+	def individual_error(self,desired):
+		error = np.subtract(self.layer[self.end_index].output, desired)
+		sq_error= np.sum(np.square(error))/self.topology[self.end_index] 
+		return sq_error
+
+	def forward_pass(self, input_features ): 
+
+		self.layer[0].output = input_features 
+
+		for n in range(0, self.end_index):  
+			z = self.layer[n].output.dot(self.layer[n+1].weights) - self.layer[n+1].bias 
+			self.layer[n+1].output = self.activation(z) 
+
+	def backward_pass(self, input_features, desired):   
+
+		last_index= self.end_index
+		if self.output_activationfunc == 'sigmoid': #sigmoid
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))  
+		else: # linear output activation
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))  
+
+
+		for n in range(self.end_index-1,0, -1):   
+			self.layer[n].gradient = self.layer[n+1].gradient.dot(self.layer[n+1].weights.T) * (self.layer[n].output * (1-self.layer[n].output))  
+		
+		for n in range(self.end_index,0, -1):  
 		 
-		return sqerror
-
-	def ForwardPass(self, X ): 
-		z1 = X.dot(self.W1) - self.B1  
-		self.hidout = self.sigmoid(z1) # output of first hidden layer   
-		z2 = self.hidout.dot(self.W2)  - self.B2 
-		self.out = self.sigmoid(z2)  # output second hidden layer
-
+			self.layer[n].weights += self.layer[n-1].output.T.dot(self.layer[n].gradient) * self.sgdlearn_rate
+			self.layer[n].bias  +=  -1 * self.sgdlearn_rate * self.layer[n].gradient
  
-
-
-
-	def BackwardPass(self, input_vec, desired):   
-		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
-		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout)) #https://www.tutorialspoint.com/numpy/numpy_dot.htm  https://www.geeksforgeeks.org/numpy-dot-python/
-  
-		self.W2+= self.hidout.T.dot(self.out_delta) * self.learn_rate
-		self.B2+=  (-1 * self.learn_rate * self.out_delta)
-
-		self.W1 += (input_vec.T.dot(self.hid_delta) * self.learn_rate) 
-		self.B1+=  (-1 * self.learn_rate * self.hid_delta) 
+ 
  
 
 
@@ -174,53 +175,40 @@ class Network:
 
 		self.B2+=  (-1  *  adam_outlayergrad )
  
-
 		self.W1 += input_vec.T.dot(adam_hidlayergrad) 
 
 		self.B1+=  (-1 *  adam_hidlayergrad) 
 		 
-
-		#print(self.W1, ' W1')
-		#print(self.hid_delta, ' self.hidgrad') 
-		#print(adam_hidlayergrad, '  adam_hidlayergrad')
-
- 
- 
-
-
-
-
-
-	 
  
 	
-	def TestNetwork(self, Data, testSize, tolerance):
-		Input = np.zeros((1, self.Top[0])) # temp hold input
-		Desired = np.zeros((1, self.Top[2])) 
-		nOutput = np.zeros((1, self.Top[2]))
+	def TestNetwork(self, data_features, testSize, tolerance):
+
+
+		#Input = np.zeros((1, self.Top[0])) # temp hold input
+		desired = np.zeros((1, self.topology[self.end_index])) 
+ 
+		#nOutput = np.zeros((1, self.topology[self.end_index]))
+
 		clasPerf = 0
 		sse = 0  
-		self.W1 = self.BestW1
+		'''self.W1 = self.BestW1
 		self.W2 = self.BestW2 #load best knowledge
 		self.B1 = self.BestB1
-		self.B2 = self.BestB2 #load best knowledge
+		self.B2 = self.BestB2 #load best knowledge'''
  
 		for s in range(0, testSize):
 							
-			Input  =   Data[s,0:self.Top[0]] 
-			Desired =  Data[s,self.Top[0]:] 
+			features  =   data_features[s,0:self.Top[0]] 
+			desired =  data_features[s,self.Top[0]:] 
 
-			self.ForwardPass(Input ) 
-			sse = sse+ self.sampleEr(Desired)  
+			self.forward_pass(features) 
+			sse = sse+ self.individual_error(desired)  
 
 
-			pred_binary = np.where(self.out > (1 - tolerance), 1, 0)
+			pred_binary = np.where(self.layer[self.end_index].output > (1 - tolerance), 1, 0)
 			
-			if( (Desired==pred_binary).all()):
-				clasPerf =  clasPerf +1   
-
-			#if(np.isclose(self.out, Desired, atol=erTolerance).any()):
-				#clasPerf =  clasPerf +1  
+			if( (desired==pred_binary).all()):
+				clasPerf =  clasPerf +1    
 
 		return ( sse/testSize, float(clasPerf)/testSize * 100 )
 
@@ -236,8 +224,8 @@ class Network:
 	def BP_GD(self, adam_optimiser):  
 
 
-		Input = np.zeros((1, self.Top[0])) # temp hold input
-		Desired = np.zeros((1, self.Top[2])) 
+		Input = np.zeros((1, self.topology[0])) # temp hold input
+		Desired = np.zeros((1, self.topology[self.end_index])) 
  
   
 		Er = [] 
@@ -248,24 +236,28 @@ class Network:
 			sse = 0
 			for s in range(0, self.NumSamples):
 		
-				Input[:]  =  self.TrainData[s,0:self.Top[0]]  
-				Desired[:]  = self.TrainData[s,self.Top[0]:]  
+				Input[:]  =  self.TrainData[s,0:self.topology[0]]  
+ 
+				Desired[:]  = self.TrainData[s,self.topology[0]:]  
 
-				self.ForwardPass(Input)  
+				#self.ForwardPass(Input)  
+
+				data_features = Input
+ 
+				self.forward_pass(data_features)  
 
 				if adam_optimiser == True:
-					self.BackwardPass_Adam(Input ,Desired)
+					self.backward_pass(Input ,Desired)
 				else:
-					self.BackwardPass(Input ,Desired)
+					self.backward_pass(Input ,Desired)
 
-				sse = sse+ self.sampleEr(Desired)
+				sse = sse+ self.individual_error(Desired)
 			 
-			mse = np.sqrt(sse/self.NumSamples*self.Top[2])
+			mse = np.sqrt(sse/self.NumSamples*self.topology[self.end_index])
 
 			if mse < bestmse:
-				 bestmse = mse
-				 #print(bestmse, epoch, ' bestmse epoch')
-				 self.saveKnowledge() 
+				 bestmse = mse 
+				 #self.saveKnowledge() 
 				 (x,bestTrain) = self.TestNetwork(self.TrainData, self.NumSamples, 0.2)
 
 			Er = np.append(Er, mse)
@@ -304,7 +296,7 @@ def main():
 		learnRate = 0.1  
 		TrainData  = normalisedata(TrDat, Input, Output) 
 		TestData  = normalisedata(TesDat, Input, Output)
-		MaxTime = 20 #500
+		MaxTime = 500 #500
 
 
 		 
@@ -333,7 +325,7 @@ def main():
  
 
 
-	Topo = [Input, Hidden, Output] 
+	Topo = [Input,  Hidden, Hidden-2, Hidden, Output] 
 	MaxRun = 1 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
