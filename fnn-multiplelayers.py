@@ -19,6 +19,23 @@ import random
 import time
 
 
+from numpy import *
+
+
+# this is to compare results with sk-learn or to process data 
+from sklearn import datasets 
+from sklearn.metrics import mean_squared_error 
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import Normalizer
+
+from sklearn.model_selection import train_test_split 
+from sklearn import metrics
+from sklearn.metrics import roc_auc_score
+from sklearn.neural_network import MLPClassifier
+
+
+
 class Adam():
 	def __init__(self, learning_rate=0.001, b1=0.9, b2=0.999):
 		self.learning_rate = learning_rate
@@ -67,31 +84,36 @@ class Layers:
  
 class Network:
 
-	def __init__(self, topology, Train, Test, MaxTime, Samples, MinPer, learnRate): 
+	def __init__(self, topology, x_train, x_test, y_train, y_test, max_epocs, num_samples, min_error, learn_rate): 
 		self.topology  = topology  # NN topology [input, hidden, output]
 
 		self.output_activationfunc = 'sigmoid'
 
 
-		self.Top  = topology  # NN topology [input, hidden, output]
+		#self.Top  = topology  # NN topology [input, hidden, output]
 
 
-		self.Max = MaxTime # max epocs
-		self.TrainData = Train
-		self.TestData = Test
-		self.NumSamples = Samples
+		self.max_epocs = max_epocs # max epocs
+		#self.TrainData = Train
+		#self.TestData = Test
 
-		self.sgdlearn_rate  = learnRate
+		self.x_train = x_train
+		self.x_test = x_test
+		self.y_train = y_train
+		self.y_test = y_test
+
+
+		self.num_samples = num_samples
+
+		self.sgdlearn_rate  = learn_rate
  
 
-		self.minPerf = MinPer
+		self.min_error = min_error 
 		 
 		np.random.seed()   
 
 		self.adam_learnrate = 0.05
-
-		self.adam_outlayer = Adam(self.adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
-		self.adam_hidlayer = Adam(self.adam_learnrate, 0.9, 0.999)  #learningrate=0.001, b1=0.9, b2=0.999
+ 
 
 		self.end_index = len(self.topology)-1
 
@@ -109,15 +131,17 @@ class Network:
 		#	print(n, self.layer[n].output)
 		#	print(n, self.layer[n].weights)
  
-
-
-
-
-
+ 
 
 	def activation(self,x):
 		if  self.output_activationfunc == 'sigmoid':
 			return 1 / (1 + np.exp(-x))
+		elif self.output_activationfunc == 'step': # todo
+			if x > 0:
+				return 1  #todo
+			else:
+				return 0
+
 		else:
 			return x # linear acivation
 
@@ -144,9 +168,9 @@ class Network:
 
 		last_index= self.end_index
 		if self.output_activationfunc == 'sigmoid': #sigmoid
-			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))  
-		else: # linear output activation
-			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))  
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))
+		else: # linear or step output activation
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output) * self.layer[last_index].output 
 
 
 		for n in range(self.end_index-1,0, -1):   
@@ -157,49 +181,48 @@ class Network:
 			self.layer[n].weights += self.layer[n-1].output.T.dot(self.layer[n].gradient) * self.sgdlearn_rate
 			self.layer[n].bias  +=  -1 * self.sgdlearn_rate * self.layer[n].gradient
  
+
+	def backwardpass_advancedgradients(self, input_vec, desired):   
+
+		last_index= self.end_index
+		if self.output_activationfunc == 'sigmoid': #sigmoid
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output)*(self.layer[last_index].output*(1-self.layer[last_index].output))
+		else: # linear or step output activation
+			self.layer[last_index].gradient =   (desired - self.layer[last_index].output) * self.layer[last_index].output 
+
+		self.layer[last_index].gradient_adv = self.layer[last_index].adam_opt.update(self.layer[last_index].gradient)
+
+
+		for n in range(self.end_index-1,0, -1):   
+			self.layer[n].gradient = self.layer[n+1].gradient.dot(self.layer[n+1].weights.T) * (self.layer[n].output * (1-self.layer[n].output)) 
+			self.layer[n].gradient_adv = self.layer[n].adam_opt.update(self.layer[n].gradient) 
+		
+		for n in range(self.end_index,0, -1):  
+		 
+			self.layer[n].weights += self.layer[n-1].output.T.dot(self.layer[n].gradient_adv)  
+			self.layer[n].bias  +=  -1  * self.layer[n].gradient_adv
  
- 
-
-
-	def BackwardPass_Adam(self, input_vec, desired):   
-
- 
-
-		self.out_delta =   (desired - self.out)*(self.out*(1-self.out))  
-		self.hid_delta = self.out_delta.dot(self.W2.T) * (self.hidout * (1-self.hidout))  
-
-		adam_outlayergrad = self.adam_outlayer.update(self.out_delta.copy())
-		adam_hidlayergrad = self.adam_hidlayer.update(self.hid_delta.copy())
-  
-		self.W2+= self.hidout.T.dot(adam_outlayergrad ) 
-
-		self.B2+=  (-1  *  adam_outlayergrad )
- 
-		self.W1 += input_vec.T.dot(adam_hidlayergrad) 
-
-		self.B1+=  (-1 *  adam_hidlayergrad) 
 		 
  
 	
-	def TestNetwork(self, data_features, testSize, tolerance):
-
-
-		#Input = np.zeros((1, self.Top[0])) # temp hold input
-		desired = np.zeros((1, self.topology[self.end_index])) 
+	def test_network(self, features_x, desired_x, tolerance):
  
-		#nOutput = np.zeros((1, self.topology[self.end_index]))
+		desired = np.zeros((1, self.topology[self.end_index])) 
 
-		clasPerf = 0
+		size = features_x.shape[1]
+  
+
+		classification = 0
 		sse = 0  
 		'''self.W1 = self.BestW1
 		self.W2 = self.BestW2 #load best knowledge
 		self.B1 = self.BestB1
 		self.B2 = self.BestB2 #load best knowledge'''
  
-		for s in range(0, testSize):
+		for s in range(0, size):
 							
-			features  =   data_features[s,0:self.Top[0]] 
-			desired =  data_features[s,self.Top[0]:] 
+			features  =   features_x[s,:] 
+			desired =  desired_x[s,:] 
 
 			self.forward_pass(features) 
 			sse = sse+ self.individual_error(desired)  
@@ -208,57 +231,57 @@ class Network:
 			pred_binary = np.where(self.layer[self.end_index].output > (1 - tolerance), 1, 0)
 			
 			if( (desired==pred_binary).all()):
-				clasPerf =  clasPerf +1    
+				classification =  classification +1    
 
-		return ( sse/testSize, float(clasPerf)/testSize * 100 )
+		return ( sse/size, float(classification)/size * 100 )
 
 
 
 
 	def saveKnowledge(self):
-		self.BestW1 = self.W1
+		#todo
+		'''self.BestW1 = self.W1
 		self.BestW2 = self.W2
 		self.BestB1 = self.B1
-		self.BestB2 = self.B2  
+		self.BestB2 = self.B2  '''
 
-	def BP_GD(self, adam_optimiser):  
+	def backpropagation(self, optimiser):  
 
 
-		Input = np.zeros((1, self.topology[0])) # temp hold input
-		Desired = np.zeros((1, self.topology[self.end_index])) 
+		data_features = np.zeros((1, self.topology[0])) # temp hold input
+		desired = np.zeros((1, self.topology[self.end_index])) 
  
   
 		Er = [] 
 		epoch = 0
 		bestmse = 10000 # assign a large number in begining to maintain best (lowest RMSE)
-		bestTrain = 0
-		while  epoch < self.Max and bestTrain < self.minPerf :
+		best_train = 0
+		while  epoch < self.max_epocs and best_train < self.min_error :
 			sse = 0
-			for s in range(0, self.NumSamples):
+			for s in range(0, self.num_samples):
 		
-				Input[:]  =  self.TrainData[s,0:self.topology[0]]  
+				#data_features[:]  =  self.TrainData[s,0:self.topology[0]]  
+
+				data_features[:]  =  self.x_train[s,:]  
  
-				Desired[:]  = self.TrainData[s,self.topology[0]:]  
-
-				#self.ForwardPass(Input)  
-
-				data_features = Input
+				desired[:]  = self.y_train[s,:] 
+ 
  
 				self.forward_pass(data_features)  
 
-				if adam_optimiser == True:
-					self.backward_pass(Input ,Desired)
-				else:
-					self.backward_pass(Input ,Desired)
+				if optimiser == 'adam':
+					self.backwardpass_advancedgradients(data_features ,desired)
+				else: 
+					self.backward_pass(data_features ,desired)
 
-				sse = sse+ self.individual_error(Desired)
+				sse = sse+ self.individual_error(desired)
 			 
-			mse = np.sqrt(sse/self.NumSamples*self.topology[self.end_index])
+			mse = np.sqrt(sse/self.num_samples*self.topology[self.end_index])
 
 			if mse < bestmse:
 				 bestmse = mse 
 				 #self.saveKnowledge() 
-				 (x,bestTrain) = self.TestNetwork(self.TrainData, self.NumSamples, 0.2)
+				 (x,bestTrain) = self.test_network(self.x_train, self.y_train,  0.2)
 
 			Er = np.append(Er, mse)
 			
@@ -279,53 +302,82 @@ def normalisedata(data, inputsize, outsize): # normalise the data between [0,1]
 	tds = abs(traindt/dt) 
 	return np.concatenate(( tds[:,range(0,inputsize)], data[:,range(inputsize,inputsize+outsize)]), axis=1)
 
+
+
+def read_data(problem):
+
+	if problem ==1:
+		#Source:  Pima-Indian diabetes dataset: https://www.kaggle.com/kumargh/pimaindiansdiabetescsv
+		data_in = genfromtxt("data/pima-indians-diabetes.csv", delimiter=",")
+		data_inputx = data_in[:,0:8] # all raw features 0, 1, 2, 3, 4, 5, 6, 7 
+		transformer = Normalizer().fit(data_inputx)  # fit does nothing. (scikit learn)
+		data_inputx = transformer.transform(data_inputx)
+
+		data_inputy = data_in[:,-1] # this is target - so that last col is selected from data
+
+		# needs one hot encoding 
+	elif problem ==2:
+		#Iris with one hot encoded labels
+		data_in = genfromtxt("data/iris.csv", delimiter=",")
+		data_inputx = data_in[:,0:4] # all raw features [0, 1, 2, 3]
+		transformer = Normalizer().fit(data_inputx)  # fit does nothing. (scikit learn)
+		data_inputx = transformer.transform(data_inputx)
+
+		#data_inputx = transformer.transform(data_inputx)
+		data_inputy = data_in[:,4:7] # one hot encded labels (3 classes) [4,5,6]
+
+
+	elif problem ==3: 
+		#wine
+		data_in = genfromtxt("data/wine.csv", delimiter=",")
+		data_inputx = data_in[:,0:13] # all features [0, 1, 2, 3, ... 12] (13 raw features )
+		#data_inputx = transformer.transform(data_inputx)
+		data_inputy = data_in[:,-1] # 
+		
+
+		# needs one hot encoding 
+
+	else:
+		print('else')
+
+
+
+
+
+
+	x_train, x_test, y_train, y_test = train_test_split(data_inputx, data_inputy, test_size=0.40, random_state=1)
+
+	return x_train, x_test, y_train, y_test
+
 def main(): 
+
+	#assume you use one hot encoding always in labels for classification problems
 					
 		
-	problem = 1 # [1,2,3] choose your problem (Iris classfication or 4-bit parity or XOR gate)
-				
+	problem = 2 # iris works, rest need one hot encoding fixed
 
-	if problem == 1:
-		TrDat  = np.loadtxt("data/train.csv", delimiter=',') #  Iris classification problem (UCI dataset)
-		TesDat  = np.loadtxt("data/test.csv", delimiter=',') #  
-		Hidden = 6
-		Input = 4
-		Output = 2 #https://stats.stackexchange.com/questions/207049/neural-network-for-binary-classification-use-1-or-2-output-neurons
-		TrSamples =  TrDat.shape[0]
-		TestSize = TesDat.shape[0]
-		learnRate = 0.1  
-		TrainData  = normalisedata(TrDat, Input, Output) 
-		TestData  = normalisedata(TesDat, Input, Output)
-		MaxTime = 500 #500
+	x_train, x_test, y_train, y_test  = read_data(problem)
 
+	#print(x_train, y_train, ' x_train,  y_train ')
 
-		 
+	input_features = x_train.shape[1]
+	num_outputs =  y_train.shape[1]
 
-	elif problem == 2:
-		TrainData = np.loadtxt("data/4bit.csv", delimiter=',') #  4-bit parity problem
-		TestData = np.loadtxt("data/4bit.csv", delimiter=',') #  
-		Hidden = 6
-		Input = 4
-		Output = 1 #  https://stats.stackexchange.com/questions/207049/neural-network-for-binary-classification-use-1-or-2-output-neurons
-		TrSamples =  TrainData.shape[0]
-		TestSize = TestData.shape[0]
-		learnRate = 0.9 
-		MaxTime = 200 #1000
+	TrSamples =  x_train.shape[0]
+	TestSize = x_test.shape[0]
 
-	elif problem == 3:
-		TrainData = np.loadtxt("data/xor.csv", delimiter=',') #  XOR  problem
-		TestData = np.loadtxt("data/xor.csv", delimiter=',') #  
-		Hidden = 3
-		Input = 2
-		Output = 2  # one hot encoding: https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
-		TrSamples =  TrainData.shape[0]
-		TestSize = TestData.shape[0]
-		learnRate = 0.5
-		MaxTime = 500
+	learnRate = 0.1  
+
+	hidden = 5 # let user decide for prob
+ 
  
 
 
-	Topo = [Input,  Hidden, Hidden-2, Hidden, Output] 
+	Topo = [input_features, hidden,  hidden, num_outputs] 
+
+	MaxTime = 500 # epochs
+
+
 	MaxRun = 1 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
@@ -342,19 +394,21 @@ def main():
 	Epochs =  np.zeros(MaxRun)
 	Time =  np.zeros(MaxRun)
 
-	adam_optimiser = True # False means you use SGD 
+	optimiser = 'adam' # 'sgd' 
 
 
 
 	for run in range(0, MaxRun  ):
 		print(run, ' is experimental run') 
 
-		fnn = Network(Topo, TrainData, TestData, MaxTime, TrSamples, MinCriteria, learnRate)
+		fnn = Network(Topo, x_train, x_test, y_train, y_test, MaxTime, TrSamples, MinCriteria, learnRate)
 		start_time=time.time()
-		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.BP_GD(adam_optimiser)   
+		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.backpropagation(optimiser)   
 
 		Time[run]  =time.time()-start_time
-		(testMSE[run], testPerf[run]) = fnn.TestNetwork(TestData, TestSize, testTolerance)
+		(testMSE[run], testPerf[run]) = fnn.test_network(x_test, y_test,  testTolerance)
+
+
 	print(' print classification performance for each experimental run') 
 	print(trainPerf)
 	print(testPerf)
