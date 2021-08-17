@@ -112,7 +112,7 @@ class Network:
 		 
 		np.random.seed()   
 
-		self.adam_learnrate = 0.05
+		self.adam_learnrate = 0.01
  
 
 		self.end_index = len(self.topology)-1
@@ -485,12 +485,18 @@ def main():
  
 
 
-	Topo = [input_features,   hidden, num_outputs] 
+	#Topo = [input_features,   hidden, num_outputs] #works
+
+
+	Topo = [input_features,   hidden, hidden,  num_outputs] # works 
+
+
+	#Topo = [input_features,   hidden, hidden, hidden,  num_outputs] # works (bad results)
 
 	max_time = 500 # epochs
 
 
-	MaxRun = 10 # number of experimental runs 
+	MaxRun = 3 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
 
@@ -506,7 +512,7 @@ def main():
 	Epochs =  np.zeros(MaxRun)
 	Time =  np.zeros(MaxRun)
 
-	optimiser = 'adam' # 'sgd' 'adam'
+	optimiser = 'sgd' # 'sgd' 'adam' #adam has worse results than SGD
 
 
 
