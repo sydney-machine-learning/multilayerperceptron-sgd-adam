@@ -35,6 +35,15 @@ from sklearn.metrics import roc_auc_score
 from sklearn.neural_network import MLPClassifier
 
 
+#keras 
+
+from keras.layers import Dense
+from keras.models import Sequential
+
+import random
+
+
+from sklearn.metrics import roc_curve, auc
 
 class Adam():
 	def __init__(self, learning_rate=0.001, b1=0.9, b2=0.999):
@@ -84,7 +93,7 @@ class Layers:
  
 class Network:
 
-	def __init__(self, topology, x_train, x_test, y_train, y_test, max_epocs, num_samples, min_error, learn_rate): 
+	def __init__(self, topology, x_train, x_test, y_train, y_test, max_epocs,   min_error, learn_rate): 
 		self.topology  = topology  # NN topology [input, hidden, output]
 
 		self.output_activationfunc = 'sigmoid'
@@ -103,7 +112,7 @@ class Network:
 		self.y_test = y_test
 
 
-		self.num_samples = num_samples
+		self.num_samples =  x_train.shape[0] 
 
 		self.sgdlearn_rate  = learn_rate
  
@@ -207,10 +216,13 @@ class Network:
 	
 	def test_network(self, features_x, desired_x, tolerance):
  
-		desired = np.zeros((1, self.topology[self.end_index])) 
+		#desired = np.zeros((1, self.topology[self.end_index])) 
 
 		size = features_x.shape[1]
   
+
+		predictions = np.zeros((size, desired_x.shape[1])) 
+
 
 		classification = 0
 		sse = 0  
@@ -225,15 +237,22 @@ class Network:
 			desired =  desired_x[s,:] 
 
 			self.forward_pass(features) 
+			predictions[s,:] = self.layer[self.end_index].output
 			sse = sse+ self.individual_error(desired)  
 
 
 			pred_binary = np.where(self.layer[self.end_index].output > (1 - tolerance), 1, 0)
 			
 			if( (desired==pred_binary).all()):
-				classification =  classification +1    
+				classification =  classification +1   
 
-		return ( sse/size, float(classification)/size * 100 )
+		accuracy = ( sse/size, float(classification)/size * 100 )
+
+
+		
+		#accuracy = accuracy_score(predictions,  desired_x)  #scikit-learn
+
+		return accuracy
 
 
 
@@ -303,6 +322,105 @@ def normalisedata(data, inputsize, outsize): # normalise the data between [0,1]
 	return np.concatenate(( tds[:,range(0,inputsize)], data[:,range(inputsize,inputsize+outsize)]), axis=1)
 
 
+	
+def scipy_nn(x_train, x_test, y_train, y_test, type_model, hidden, learn_rate, run_num, max_time):
+	#Source: https://scikit-learn.org/stable/modules/neural_networks_supervised.html 
+
+
+
+	if type_model ==0: #SGD
+		nn = MLPClassifier(hidden_layer_sizes=(hidden,), random_state=run_num, max_iter=max_time,solver='sgd',  learning_rate_init=learn_rate )
+		#https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html
+	elif type_model ==1: #Adam
+		nn = MLPClassifier(hidden_layer_sizes=(hidden,), random_state=run_num, max_iter=max_time,solver='adam', learning_rate_init=learn_rate)
+		#https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html
+	elif type_model ==2: #SGD with 2 hidden layers
+		nn = MLPClassifier(hidden_layer_sizes=(hidden,hidden), random_state=run_num, max_iter=max_time,solver='sgd',learning_rate='constant', learning_rate_init=learn_rate)
+		#hidden_layer_sizes=(hidden,hidden, hidden) would implement 3 hidden layers
+	else:
+		print('no model')    
+ 
+	# Train the model using the training sets
+	nn.fit(x_train, y_train)
+
+	# Make predictions using the testing set
+	y_pred_test = nn.predict(x_test)
+	y_pred_train = nn.predict(x_train)
+
+	#print([coef.shape for coef in nn.coefs_], 'weights shape')
+ 
+	#print("RMSE: %.2f" % np.sqrt(mean_squared_error(y_test, y_pred)))  
+	acc_test = accuracy_score(y_pred_test, y_test) 
+	acc_train = accuracy_score(y_pred_train, y_train) 
+
+	cm = confusion_matrix(y_pred_test, y_test) 
+	#print(cm, 'is confusion matrix')
+
+	#auc = roc_auc_score(y_pred, y_test, average=None) 
+	return acc_test,acc_train
+
+
+
+
+def keras_nn(x_train, x_test, y_train, y_test, type_model, hidden, learn_rate, max_time):
+ 
+	#https://keras.io/api/models/model_training_apis/
+
+	#note that keras model on own ensures that every run begins with different initial 
+	#weights so run_num is not needed 
+	outputs = y_train.shape[1]
+
+	if type_model ==0: #SGD
+		#nn = MLPClassifier(hidden_layer_sizes=(hidden,), random_state=run_num, max_iter=100,solver='sgd',  learning_rate_init=learn_rate )
+		model = Sequential()
+		model.add(Dense(hidden, input_dim=x_train.shape[1], activation='relu'))
+		model.add(Dense(outputs, activation='sigmoid'))
+		model.compile(loss='binary_crossentropy', optimizer='sgd',  metrics=['accuracy'])
+	
+	elif type_model ==1: #Adam
+		#nn = MLPClassifier(hidden_layer_sizes=(hidden,), random_state=run_num, max_iter=100,solver='adam', learning_rate_init=learn_rate)
+		model = Sequential()
+		model.add(Dense(hidden, input_dim=x_train.shape[1], activation='sigmoid'))
+		model.add(Dense(outputs, activation='sigmoid'))
+		model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+
+	elif type_model ==2: #SGD with 2 hidden layers
+		#nn = MLPClassifier(hidden_layer_sizes=(hidden,hidden), random_state=run_num, max_iter=100,solver='sgd',learning_rate='constant', learning_rate_init=learn_rate)
+		#hidden_layer_sizes=(hidden,hidden, hidden) would implement 3 hidden layers
+		model = Sequential()
+		model.add(Dense(hidden, input_dim=x_train.shape[1], activation='sigmoid')) 
+		model.add(Dense(hidden, activation='sigmoid'))
+		model.add(Dense(outputs, activation='sigmoid'))
+		model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+	
+	else:
+		print('no model')    
+
+	print( ' model defined ... ')
+
+	
+	# Fit model
+	history = model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=max_time, batch_size=10, verbose=0)
+
+	# Evaluate the model
+	#https://keras.io/api/models/model_training_apis/
+	_, acc_train = model.evaluate(x_train, y_train, verbose=0)
+	_, acc_test = model.evaluate(x_test, y_test, verbose=0)
+	#print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
+
+	# Plot history
+	'''plt.plot(history.history['accuracy'], label='train')
+	plt.plot(history.history['val_accuracy'], label='test')
+	plt.legend()
+	plt.savefig(str(type_model)+'nodp.png') 
+	plt.clf()'''
+   
+	#auc = roc_auc_score(y_pred, y_test, average=None) 
+	return acc_test, acc_train
+
+ 
+
 
 def read_data(problem):
 
@@ -341,10 +459,6 @@ def read_data(problem):
 		print('else')
 
 
-
-
-
-
 	x_train, x_test, y_train, y_test = train_test_split(data_inputx, data_inputy, test_size=0.40, random_state=1)
 
 	return x_train, x_test, y_train, y_test
@@ -363,8 +477,6 @@ def main():
 	input_features = x_train.shape[1]
 	num_outputs =  y_train.shape[1]
 
-	TrSamples =  x_train.shape[0]
-	TestSize = x_test.shape[0]
 
 	learnRate = 0.1  
 
@@ -375,7 +487,7 @@ def main():
 
 	Topo = [input_features, hidden,  hidden, num_outputs] 
 
-	MaxTime = 500 # epochs
+	max_time = 500 # epochs
 
 
 	MaxRun = 1 # number of experimental runs 
@@ -401,7 +513,7 @@ def main():
 	for run in range(0, MaxRun  ):
 		print(run, ' is experimental run') 
 
-		fnn = Network(Topo, x_train, x_test, y_train, y_test, MaxTime, TrSamples, MinCriteria, learnRate)
+		fnn = Network(Topo, x_train, x_test, y_train, y_test, max_time,   MinCriteria, learnRate)
 		start_time=time.time()
 		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.backpropagation(optimiser)   
 
@@ -427,13 +539,66 @@ def main():
 	print(' print mean and std of computational time taken') 
 	
 	print(np.mean(Time), np.std(Time))
+
+	# now we compare with keras implementation 
+
+	print( ' compare with keras')
+
+	max_expruns = 2
+
+	SGD_all = np.zeros(max_expruns) 
+	Adam_all = np.zeros(max_expruns) 
+	SGD2_all = np.zeros(max_expruns)  
+
+	learn_rate = 0.01  
+
+	for run_num in range(0,max_expruns): 
+ 
+		
+		acc_sgd, acc_train = keras_nn(x_train, x_test, y_train, y_test, 2, hidden, learn_rate, max_time) #SGD2
+		print(acc_sgd, acc_train,  ' SGD acc_sgd, acc_train')
+		acc_adam, acc_train = keras_nn(x_train, x_test, y_train, y_test, 1, hidden, learn_rate, max_time) #Adam 
+		print(acc_adam, acc_train,  '  acc_adam, acc_train')
+		#acc_sgd2, acc_train = keras_nn(x_train, x_test, y_train, y_test, 0, hidden, learn_rate,  max_time) #SGD
+ 	
+		SGD_all[run_num] = acc_sgd
+		Adam_all[run_num] = acc_adam 
+		
+	print(SGD_all, hidden,' SGD_all')
+	print(np.mean(SGD_all), hidden, ' mean SGD_all')
+	print(np.std(SGD_all), hidden, ' std SGD_all')
+
+	print(Adam_all, hidden,' Adam_all')
+	print(np.mean(Adam_all), hidden, ' Adam _all')
+	print(np.std(Adam_all), hidden, ' Adam _all')
+ 
+
+	print( ' compare with scikit-learn')
+
 	
 	
+	for run_num in range(0,max_expruns): 
+ 
+		 
+		acc_sgd,  acc_train = scipy_nn(x_train, x_test, y_train, y_test, 0, hidden, learn_rate, run_num, max_time) #SGD
+		acc_adam,  acc_train = scipy_nn(x_train, x_test, y_train, y_test, 1, hidden, learn_rate, run_num. max_time) #Adam 
+		  
+		
+		SGD_all[run_num] = acc_sgd
+		Adam_all[run_num] = acc_adam 
+		
+	print(SGD_all, hidden,' SGD_all scikit')
+	print(np.mean(SGD_all), hidden, ' mean SGD_all')
+	print(np.std(SGD_all), hidden, ' std SGD_all')
+
+	print(Adam_all, hidden,' Adam_all')
+	print(np.mean(Adam_all), hidden, ' Adam _all')
+	print(np.std(Adam_all), hidden, ' Adam _all')
 				 
-	plt.figure()
+	'''plt.figure()
 	plt.plot(erEp )
 	plt.ylabel('error')  
-	plt.savefig('out.png')
+	plt.savefig('out.png')'''
 			 
  
 if __name__ == "__main__": main()
