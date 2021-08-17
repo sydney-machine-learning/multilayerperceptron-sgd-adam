@@ -112,7 +112,7 @@ class Network:
 		 
 		np.random.seed()   
 
-		self.adam_learnrate = 0.01
+		self.adam_learnrate = 0.05 #sensitive for adam
  
 
 		self.end_index = len(self.topology)-1
@@ -512,7 +512,7 @@ def main():
 	Epochs =  np.zeros(MaxRun)
 	Time =  np.zeros(MaxRun)
 
-	optimiser = 'sgd' # 'sgd' 'adam' #adam has worse results than SGD
+	optimiser = 'adam' # 'sgd' 'adam' #adam has worse results than SGD
 
 
 
