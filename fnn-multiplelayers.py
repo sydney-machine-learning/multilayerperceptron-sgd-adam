@@ -1,16 +1,7 @@
-# Rohitash Chandra, 2017 c.rohitash@gmail.conm
+# Rohitash Chandra, 2021 c.rohitash@gmail.conm
 
 #https://github.com/rohitash-chandra
- 
-
-# ref: http://iamtrask.github.io/2015/07/12/basic-python-network/  
- 
-
-#Sigmoid units used in hidden and output  
-
-# Numpy used: http://cs231n.github.io/python-numpy-tutorial/#numpy-arrays
- 
-
+  
  
 
 import matplotlib.pyplot as plt
@@ -218,7 +209,7 @@ class Network:
  
 		#desired = np.zeros((1, self.topology[self.end_index])) 
 
-		size = features_x.shape[1]
+		size = features_x.shape[0]
   
 
 		predictions = np.zeros((size, desired_x.shape[1])) 
@@ -246,13 +237,17 @@ class Network:
 			if( (desired==pred_binary).all()):
 				classification =  classification +1   
 
-		accuracy = ( sse/size, float(classification)/size * 100 )
+		accuracy = float(classification)/size * 100 
 
+		#print(predictions.shape, desired_x.shape, 'pred')
 
-		
-		#accuracy = accuracy_score(predictions,  desired_x)  #scikit-learn
+		auc = 0  
 
-		return accuracy
+		pred_binary = np.where(predictions > (1 - tolerance), 1, 0)
+		accuracy = accuracy_score(pred_binary,  desired_x)  #scikit-learn
+ 
+
+		return sse/size, accuracy, auc
 
 
 
@@ -271,9 +266,9 @@ class Network:
 		desired = np.zeros((1, self.topology[self.end_index])) 
  
   
-		Er = [] 
+		er_list = [] 
 		epoch = 0
-		bestmse = 10000 # assign a large number in begining to maintain best (lowest RMSE)
+		best_mse = 10000 # assign a large number in begining to maintain best (lowest RMSE)
 		best_train = 0
 		while  epoch < self.max_epocs and best_train < self.min_error :
 			sse = 0
@@ -297,12 +292,12 @@ class Network:
 			 
 			mse = np.sqrt(sse/self.num_samples*self.topology[self.end_index])
 
-			if mse < bestmse:
-				 bestmse = mse 
+			if mse < best_mse:
+				 best_mse = mse 
 				 #self.saveKnowledge() 
-				 (x,bestTrain) = self.test_network(self.x_train, self.y_train,  0.2)
+				 (x,best_acc, best_auc) = self.test_network(self.x_train, self.y_train,  0.4)
 
-			Er = np.append(Er, mse)
+			er_list = np.append(er_list, mse)
 			
 			epoch=epoch+1  
 
@@ -311,7 +306,7 @@ class Network:
 		#print(self.BestW1, 'W1')
 		#print(self.BestW2, ' W2')
 
-		return (Er,bestmse, bestTrain, epoch) 
+		return (er_list,best_mse, best_acc, best_auc, epoch) 
 
 
 
@@ -352,9 +347,15 @@ def scipy_nn(x_train, x_test, y_train, y_test, type_model, hidden, learn_rate, r
 	#print("RMSE: %.2f" % np.sqrt(mean_squared_error(y_test, y_pred)))  
 	acc_test = accuracy_score(y_pred_test, y_test) 
 	acc_train = accuracy_score(y_pred_train, y_train) 
+	
+	mse_train = mean_squared_error(y_pred_train, y_train, squared=False)
 
-	cm = confusion_matrix(y_pred_test, y_test) 
-	#print(cm, 'is confusion matrix')
+	mse_test = mean_squared_error( y_pred_test, y_test, squared=False)
+
+	print(mse_train, mse_test, ' mse train and test')
+
+
+	#cm = confusion_matrix(y_pred_test, y_test)  
 
 	#auc = roc_auc_score(y_pred, y_test, average=None) 
 	return acc_test,acc_train
@@ -395,9 +396,7 @@ def keras_nn(x_train, x_test, y_train, y_test, type_model, hidden, learn_rate, m
 		model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
 	
 	else:
-		print('no model')    
-
-	print( ' model defined ... ')
+		print('no model')     
 
 	
 	# Fit model
@@ -408,6 +407,7 @@ def keras_nn(x_train, x_test, y_train, y_test, type_model, hidden, learn_rate, m
 	_, acc_train = model.evaluate(x_train, y_train, verbose=0)
 	_, acc_test = model.evaluate(x_test, y_test, verbose=0)
 	#print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
+ 
 
 	# Plot history
 	'''plt.plot(history.history['accuracy'], label='train')
@@ -485,12 +485,12 @@ def main():
  
 
 
-	Topo = [input_features, hidden,  hidden, num_outputs] 
+	Topo = [input_features,   hidden, num_outputs] 
 
 	max_time = 500 # epochs
 
 
-	MaxRun = 1 # number of experimental runs 
+	MaxRun = 10 # number of experimental runs 
 	 
 	MinCriteria = 95 #stop when learn 95 percent
 
@@ -506,7 +506,7 @@ def main():
 	Epochs =  np.zeros(MaxRun)
 	Time =  np.zeros(MaxRun)
 
-	optimiser = 'adam' # 'sgd' 
+	optimiser = 'adam' # 'sgd' 'adam'
 
 
 
@@ -515,10 +515,13 @@ def main():
 
 		fnn = Network(Topo, x_train, x_test, y_train, y_test, max_time,   MinCriteria, learnRate)
 		start_time=time.time()
-		(erEp,  trainMSE[run] , trainPerf[run] , Epochs[run]) = fnn.backpropagation(optimiser)   
+		(erEp,  trainMSE[run] , trainPerf[run], auc_train, Epochs[run]) = fnn.backpropagation(optimiser)   
+		print(auc_train, ' is AUC train')
 
 		Time[run]  =time.time()-start_time
-		(testMSE[run], testPerf[run]) = fnn.test_network(x_test, y_test,  testTolerance)
+		(testMSE[run], testPerf[run], auc_test) = fnn.test_network(x_test, y_test,  testTolerance)
+		print(auc_test, ' is AUC test')
+
 
 
 	print(' print classification performance for each experimental run') 
@@ -542,7 +545,7 @@ def main():
 
 	# now we compare with keras implementation 
 
-	print( ' compare with keras')
+	print( ' compare with keras') #----------------------------------------------------------------------------------------
 
 	max_expruns = 2
 
@@ -550,7 +553,7 @@ def main():
 	Adam_all = np.zeros(max_expruns) 
 	SGD2_all = np.zeros(max_expruns)  
 
-	learn_rate = 0.01  
+	learn_rate = 0.1  
 
 	for run_num in range(0,max_expruns): 
  
@@ -573,7 +576,7 @@ def main():
 	print(np.std(Adam_all), hidden, ' Adam _all')
  
 
-	print( ' compare with scikit-learn')
+	print( ' compare with scikit-learn') #-----------------------------------------------------------------------------------
 
 	
 	
@@ -581,7 +584,7 @@ def main():
  
 		 
 		acc_sgd,  acc_train = scipy_nn(x_train, x_test, y_train, y_test, 0, hidden, learn_rate, run_num, max_time) #SGD
-		acc_adam,  acc_train = scipy_nn(x_train, x_test, y_train, y_test, 1, hidden, learn_rate, run_num. max_time) #Adam 
+		acc_adam,  acc_train = scipy_nn(x_train, x_test, y_train, y_test, 1, hidden, learn_rate, run_num,  max_time) #Adam 
 		  
 		
 		SGD_all[run_num] = acc_sgd
